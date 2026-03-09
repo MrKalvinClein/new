@@ -1,0 +1,945 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+local NinjaEvent = LocalPlayer:FindFirstChild("ninjaEvent")
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "Ninja Legends",
+    Icon = "sword",
+    Author = "Script Hub",
+    HideSearchBar = false,
+    Transparency = 0.4
+})
+
+local AutofarmTab = Window:Tab({
+    Title = "Autofarm",
+})
+
+AutofarmTab:Section({
+    Title = "Auto Farm",
+})
+
+AutofarmTab:Toggle({
+    Title = "Auto Swing",
+    Desc = "Automatically gains Ninjitsu",
+    Callback = function(state)
+        getgenv().AutoSwing = state
+        if state then
+            spawn(function()
+                while getgenv().AutoSwing do
+                    wait(getgenv().SwingDelay or 0.5)
+                    pcall(function()
+                        local Weapon
+                        for i, Tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+                            if Tool:FindFirstChild("ninjitsuGain") then
+                                Weapon = Tool
+                            end
+                        end
+                        if Weapon and LocalPlayer.Character then
+                            LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):EquipTool(Weapon)
+                        end
+                        if NinjaEvent then
+                            NinjaEvent:FireServer("swingKatana")
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+local swingDelay = 0.5
+
+AutofarmTab:Slider({
+    Title = "Swing Delay",
+    Value = { Min = 0.01, Max = 2, Default = 0.5 },
+    Step = 0.01,
+    Callback = function(v)
+        swingDelay = v
+        getgenv().SwingDelay = v
+    end
+})
+
+AutofarmTab:Space()
+
+AutofarmTab:Toggle({
+    Title = "Auto Sell",
+    Desc = "Automatically sells when backpack is full",
+    Callback = function(state)
+        getgenv().AutoSell = state
+        if state then
+            spawn(function()
+                local CurrentNinjitsu = LocalPlayer.leaderstats.Ninjitsu
+                local GroundBelts = ReplicatedStorage.Belts.Ground
+                local CurrentBelt = LocalPlayer.equippedBelt.Value
+
+                CurrentNinjitsu:GetPropertyChangedSignal("Value"):Connect(function()
+                    if getgenv().AutoSell and CurrentNinjitsu.Value >= GroundBelts[CurrentBelt.Name].capacity.Value then
+                        pcall(function()
+                            local sellPart = Workspace.sellAreaCircles.sellAreaCircle.circleInner
+                            firetouchinterest(sellPart, LocalPlayer.Character.Head, 1)
+                            wait(0.5)
+                            firetouchinterest(sellPart, LocalPlayer.Character.Head, 0)
+                        end)
+                    end
+                end)
+            end)
+        end
+    end
+})
+
+AutofarmTab:Toggle({
+    Title = "Auto Sell (Always)",
+    Desc = "Continuously sells without checking capacity",
+    Callback = function(state)
+        getgenv().AutoSellAlways = state
+        if state then
+            spawn(function()
+                while getgenv().AutoSellAlways do
+                    wait(0.1)
+                    pcall(function()
+                        local sellFolder = Workspace:FindFirstChild("sellAreaCircles")
+                        if sellFolder then
+                            local target = sellFolder:FindFirstChild("sellAreaCircle16") or 
+                                         sellFolder:FindFirstChild("sellAreaCircle15") or 
+                                         sellFolder:FindFirstChild("sellAreaCircle") or
+                                         sellFolder:GetChildren()[1]
+                            if target and target:FindFirstChild("circleInner") then
+                                if target.circleInner:FindFirstChild("TouchInterest") then
+                                    firetouchinterest(LocalPlayer.Character.Head, target.circleInner, 0)
+                                    wait(0.05)
+                                    firetouchinterest(LocalPlayer.Character.Head, target.circleInner, 1)
+                                else
+                                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                        LocalPlayer.Character.HumanoidRootPart.CFrame = target.circleInner.CFrame
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+AutofarmTab:Space()
+
+AutofarmTab:Toggle({
+    Title = "Farm Hoops",
+    Desc = "Automatically collects hoops for coins",
+    Callback = function(state)
+        getgenv().FarmHoops = state
+        if state then
+            spawn(function()
+                while getgenv().FarmHoops do
+                    wait(0.2)
+                    pcall(function()
+                        for i, hoop in pairs(Workspace.Hoops:GetChildren()) do
+                            if not getgenv().FarmHoops then break end
+                            local args = {
+                                [1] = "useHoop",
+                                [2] = hoop
+                            }
+                            ReplicatedStorage.rEvents.hoopEvent:FireServer(unpack(args))
+                            wait(getgenv().HoopDelay or 0.5)
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+local hoopDelay = 0.5
+
+AutofarmTab:Slider({
+    Title = "Hoop Delay",
+    Value = { Min = 0.01, Max = 2, Default = 0.5 },
+    Step = 0.01,
+    Callback = function(v)
+        hoopDelay = v
+        getgenv().HoopDelay = v
+    end
+})
+
+AutofarmTab:Space()
+
+AutofarmTab:Toggle({
+    Title = "Auto Collect Coins",
+    Callback = function(state)
+        getgenv().AutoCollectCoins = state
+        if state then
+            spawn(function()
+                while getgenv().AutoCollectCoins do
+                    wait(0.1)
+                    pcall(function()
+                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            for _, drop in pairs(Workspace:GetDescendants()) do
+                                if not getgenv().AutoCollectCoins then break end
+                                if drop:IsA("BasePart") and drop.Name:match("Coin") then
+                                    hrp.CFrame = drop.CFrame
+                                    task.wait(0.05)
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+AutofarmTab:Toggle({
+    Title = "Auto Collect Chi",
+    Callback = function(state)
+        getgenv().AutoCollectChi = state
+        if state then
+            spawn(function()
+                while getgenv().AutoCollectChi do
+                    wait(0.033)
+                    pcall(function()
+                        if LocalPlayer.Character:WaitForChild("HumanoidRootPart") then
+                            for i,v in pairs(Workspace.spawnedCoins.Valley:GetChildren()) do
+                                if not getgenv().AutoCollectChi then break end
+                                if v.Name == "Blue Chi Crate" then
+                                    LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(v.Position)
+                                    wait(.16)
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+AutofarmTab:Section({
+    Title = "Elements",
+})
+
+local selectedElement = "Lightning"
+
+AutofarmTab:Dropdown({
+    Title = "Select Element",
+    Values = {"Lightning", "Inferno", "Frost", "Earth", "Shadow", "Storm", "Thunder", "Eternal"},
+    Callback = function(option)
+        selectedElement = option
+    end
+})
+
+AutofarmTab:Button({
+    Title = "Get Selected Element",
+    Callback = function()
+        local remote = ReplicatedStorage:FindFirstChild("rEvents") and 
+                      ReplicatedStorage.rEvents:FindFirstChild("elementMasteryEvent")
+        if remote and selectedElement then
+            remote:FireServer(selectedElement)
+            WindUI:Notify({
+                Title = "Element",
+                Content = "Trying to get element: " .. tostring(selectedElement),
+                Duration = 3
+            })
+        end
+    end
+})
+
+AutofarmTab:Button({
+    Title = "Unlock All Elements",
+    Callback = function()
+        local elements = {"Lightning", "Inferno", "Frost", "Earth", "Shadow", "Storm", "Thunder", "Eternal"}
+        local remote = ReplicatedStorage:FindFirstChild("rEvents") and 
+                      ReplicatedStorage.rEvents:FindFirstChild("elementMasteryEvent")
+        if remote then
+            for _, element in pairs(elements) do
+                pcall(function()
+                    remote:FireServer(element)
+                end)
+            end
+            WindUI:Notify({
+                Title = "Elements",
+                Content = "Trying to unlock all elements!",
+                Duration = 3
+            })
+        end
+    end
+})
+
+local ShopTab = Window:Tab({
+    Title = "Shop",
+})
+
+ShopTab:Section({
+    Title = "Auto Purchase",
+})
+
+local islandToPurchase = "Ground"
+
+ShopTab:Dropdown({
+    Title = "Island",
+    Values = {"Ground", "Astral Island", "Space Island", "Tundra Island", "Eternal Island", "Sandstorm", "Thunderstorm Island", "Ancient Inferno Island", "Midnight Shadow Island", "Mythical Souls Island", "Winter Wonder Island", "Golden Master Island", "Dragon Legend Island", "Cybernetic Legends Island", "Skystorm Ultraus Island", "Chaos Legends Island", "Soul Fusion Island", "Inner Peace Island", "Blazing Vortex Island"},
+    Callback = function(option)
+        islandToPurchase = option
+        getgenv().IslandToPurchaseFrom = option
+    end
+})
+
+ShopTab:Space()
+
+ShopTab:Toggle({
+    Title = "Auto Buy Swords",
+    Callback = function(state)
+        getgenv().AutoPurchaseSwords = state
+        if state then
+            spawn(function()
+                while getgenv().AutoPurchaseSwords do
+                    wait(5)
+                    pcall(function()
+                        NinjaEvent:FireServer("buyAllSwords", islandToPurchase)
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+ShopTab:Toggle({
+    Title = "Auto Buy Belts",
+    Callback = function(state)
+        getgenv().AutoPurchaseBelts = state
+        if state then
+            spawn(function()
+                while getgenv().AutoPurchaseBelts do
+                    wait(5)
+                    pcall(function()
+                        NinjaEvent:FireServer("buyAllBelts", islandToPurchase)
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+ShopTab:Toggle({
+    Title = "Auto Upgrade Skills",
+    Callback = function(state)
+        getgenv().AutoUpgradeSkills = state
+        if state then
+            spawn(function()
+                while getgenv().AutoUpgradeSkills do
+                    wait(5)
+                    pcall(function()
+                        NinjaEvent:FireServer("buyAllSkills", islandToPurchase)
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+ShopTab:Toggle({
+    Title = "Auto Buy Shurikens",
+    Callback = function(state)
+        getgenv().AutoPurchaseShurikens = state
+        if state then
+            spawn(function()
+                while getgenv().AutoPurchaseShurikens do
+                    wait(5)
+                    pcall(function()
+                        NinjaEvent:FireServer("buyAllShurikens", islandToPurchase)
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+ShopTab:Toggle({
+    Title = "Auto Buy Ranks",
+    Callback = function(state)
+        getgenv().BuyRanks = state
+        if state then
+            spawn(function()
+                while getgenv().BuyRanks do
+                    wait(1)
+                    pcall(function()
+                        local oh1 = "buyRank"
+                        local oh2 = ReplicatedStorage.Ranks.Ground:GetChildren()
+                        for i = 1,#oh2 do
+                            NinjaEvent:FireServer(oh1, oh2[i].Name)
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+local PetsTab = Window:Tab({
+    Title = "Pets",
+})
+
+PetsTab:Section({
+    Title = "Auto Hatch",
+})
+
+local crystalToHatch = "Blue Crystal"
+
+PetsTab:Dropdown({
+    Title = "Crystal",
+    Values = {"Blue Crystal", "Purple Crystal", "Enchanted Crystal", "Astral Crystal", "Golden Crystal", "Inferno Crystal", "Galaxy Crystal", "Frozen Crystal", "Eternal Crystal", "Storm Crystal", "Thunder Crystal", "Secret Blades Crystal", "Infinity Void Crystal"},
+    Callback = function(option)
+        crystalToHatch = option
+        getgenv().CrystalToHatch = option
+    end
+})
+
+PetsTab:Toggle({
+    Title = "Auto Hatch",
+    Desc = "Auto hatches pets from selected crystal",
+    Callback = function(state)
+        getgenv().AutoHatch = state
+        if state then
+            spawn(function()
+                while getgenv().AutoHatch do
+                    wait(0.5)
+                    pcall(function()
+                        local args = {
+                            [1] = "openCrystal",
+                            [2] = crystalToHatch
+                        }
+                        ReplicatedStorage.rEvents.openCrystalRemote:InvokeServer(unpack(args))
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+PetsTab:Section({
+    Title = "Pet Management",
+})
+
+PetsTab:Toggle({
+    Title = "Auto Evolve Pets",
+    Callback = function(state)
+        getgenv().AutoEvolvePets = state
+        if state then
+            spawn(function()
+                while getgenv().AutoEvolvePets do
+                    wait(2)
+                    pcall(function()
+                        for i, type in pairs(LocalPlayer.petsFolder:GetChildren()) do
+                            for i2, pet in pairs(type:GetChildren()) do
+                                ReplicatedStorage.rEvents.petNextEvolutionEvent:FireServer("evolvePet", pet, ReplicatedStorage.evolutionOrders.evolved)
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+local petToSell = "Basic"
+
+PetsTab:Dropdown({
+    Title = "Pet To Sell",
+    Values = {"Basic", "Advanced", "Rare", "Epic", "Unique", "Omega", "Elite", "Infinity", "Awakened", "Master Legend", "BEAST", "Skystorm", "Soul Master", "Rising Hero", "Q-STRIKE", "Skyblade"},
+    Callback = function(option)
+        petToSell = option
+        getgenv().PetToSell = option
+    end
+})
+
+PetsTab:Toggle({
+    Title = "Auto Sell Pets",
+    Desc = "Automatically sells pets of selected rarity",
+    Callback = function(state)
+        getgenv().AutoSellPets = state
+        if state then
+            spawn(function()
+                while getgenv().AutoSellPets do
+                    wait(5)
+                    pcall(function()
+                        if petToSell then
+                            for i, pet in pairs(LocalPlayer.petsFolder[petToSell]:GetChildren()) do
+                                ReplicatedStorage.rEvents.sellPetEvent:FireServer("sellPet", pet)
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+local TeleportTab = Window:Tab({
+    Title = "Teleport",
+})
+
+TeleportTab:Section({
+    Title = "Islands",
+})
+
+TeleportTab:Button({
+    Title = "Unlock All Islands",
+    Callback = function()
+        local oldCFrame = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) and 
+                         LocalPlayer.Character.HumanoidRootPart.CFrame or nil
+        local unlockParts = Workspace:FindFirstChild("islandUnlockParts")
+        if unlockParts then
+            for _, v in pairs(unlockParts:GetChildren()) do
+                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    LocalPlayer.Character.HumanoidRootPart.CFrame = v.islandSignPart.CFrame
+                end
+                task.wait(0.2)
+            end
+        end
+        if oldCFrame and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = oldCFrame
+        end
+    end
+})
+
+TeleportTab:Dropdown({
+    Title = "Island Teleport",
+    Values = {
+        "Enchanted island","Astral island","Mystical island","Space island","Tundra island",
+        "Eternal island","Sandstorm island","Thunderstorm island","Ancient Inferno island",
+        "Midnight Shadow Island","Mythical Souls island","Winter Wonderland island",
+        "Golden Master island","Dragon Legend island","Cybernetic Legends island",
+        "Skystorm Ultraus island","Chaos Legends island","Soul Fusion island",
+        "Dark Elements island","Inner Peace island","Blazing Vorterx island"
+    },
+    Callback = function(SelectLocation)
+        local tp = {
+            ["Enchanted island"] = CFrame.new(51.242, 849.832, -151.814),
+            ["Astral island"] = CFrame.new(216.322, 2095.48, 256.276),
+            ["Mystical island"] = CFrame.new(184.796, 4124.18, 45.8521),
+            ["Space island"] = CFrame.new(138.522, 5847.19, 123.56),
+            ["Tundra island"] = CFrame.new(145.132, 9372.4, 90.3484),
+            ["Eternal island"] = CFrame.new(145.132, 13767.3, 90.3484),
+            ["Sandstorm island"] = CFrame.new(145.132, 17773.5, 90.3484),
+            ["Thunderstorm island"] = CFrame.new(145.132, 24157.2, 90.3484),
+            ["Ancient Inferno island"] = CFrame.new(144.021, 28364.7, 88.9619),
+            ["Midnight Shadow Island"] = CFrame.new(144.021, 33315.4, 88.9619),
+            ["Mythical Souls island"] = CFrame.new(144.021, 39426, 88.9619),
+            ["Winter Wonderland island"] = CFrame.new(144.021, 46119, 88.9619),
+            ["Golden Master island"] = CFrame.new(144.021, 52716.2, 88.9619),
+            ["Dragon Legend island"] = CFrame.new(144.021, 59703.1, 88.9619),
+            ["Cybernetic Legends island"] = CFrame.new(144.021, 66777.6, 88.9619),
+            ["Skystorm Ultraus island"] = CFrame.new(144.021, 70379.6, 88.9619),
+            ["Chaos Legends island"] = CFrame.new(144.021, 74551.3, 88.9619),
+            ["Soul Fusion island"] = CFrame.new(144.021, 79855.4, 88.9619),
+            ["Dark Elements island"] = CFrame.new(144.021, 83307.4, 88.9619),
+            ["Inner Peace island"] = CFrame.new(144.021, 87159.5, 88.9619),
+            ["Blazing Vorterx island"] = CFrame.new(144.021, 91354.5, 88.9619)
+        }
+        if tp[SelectLocation] and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = tp[SelectLocation]
+        end
+    end
+})
+
+TeleportTab:Section({
+    Title = "Bad Karma Training",
+})
+
+TeleportTab:Dropdown({
+    Title = "Bad Karma",
+    Values = {"Tornado","Lava pit","Swords Of Ancients","Fallen Infinity Blade"},
+    Callback = function(choice)
+        if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return end
+        if choice == "Tornado" then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(330.128, 16921.8, -16.1308)
+        elseif choice == "Lava pit" then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(-119.522, 13002.3, 274.569)
+        elseif choice == "Swords Of Ancients" then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(627.359, 82.2062, 2429.49)
+        elseif choice == "Fallen Infinity Blade" then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(1875.97, 82.2062, -6806.41)
+        end
+    end
+})
+
+local LocalPlayerTab = Window:Tab({
+    Title = "Local Player",
+})
+
+LocalPlayerTab:Section({
+    Title = "Humanoid",
+})
+
+local speedValue = 16
+
+LocalPlayerTab:Slider({
+    Title = "WalkSpeed",
+    Value = { Min = 16, Max = 500, Default = 16 },
+    Step = 1,
+    Callback = function(v)
+        speedValue = v
+        pcall(function()
+            LocalPlayer.Character.Humanoid.WalkSpeed = v
+        end)
+    end
+})
+
+local jumpValue = 50
+
+LocalPlayerTab:Slider({
+    Title = "JumpPower",
+    Value = { Min = 50, Max = 1000, Default = 50 },
+    Step = 1,
+    Callback = function(v)
+        jumpValue = v
+        pcall(function()
+            LocalPlayer.Character.Humanoid.JumpPower = v
+        end)
+    end
+})
+
+local MiscTab = Window:Tab({
+    Title = "Misc",
+})
+
+MiscTab:Section({
+    Title = "Misc",
+})
+
+MiscTab:Toggle({
+    Title = "Disable PopUp Coin & Chi",
+    Callback = function(state)
+        pcall(function()
+            LocalPlayer.PlayerGui.statEffectsGui.Enabled = not state
+            LocalPlayer.PlayerGui.hoopGui.Enabled = not state
+        end)
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Toggle({
+    Title = "Anti-AFK",
+    Desc = "Prevent being kicked for inactivity",
+    Value = false,
+    Callback = function(state)
+        if state then
+            LocalPlayer.Idled:Connect(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new())
+            end)
+        end
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Button({
+    Title = "Collect All Chest",
+    Callback = function()
+        Workspace.mythicalChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.goldenChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.enchantedChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.magmaChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.legendsChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.eternalChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.saharaChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.thunderChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.ancientChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.midnightShadowChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.groupRewardsCircle["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace["Daily Chest"].circleInner.CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace["wonderChest"].circleInner.CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(3.5)
+        Workspace.wonderChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        Workspace.midnightShadowChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        Workspace.ancientChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.midnightShadowChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.thunderChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.saharaChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.eternalChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.legendsChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.magmaChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.enchantedChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.goldenChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.mythicalChest["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace.groupRewardsCircle["circleInner"].CFrame = Workspace.Part.CFrame
+        Workspace["Daily Chest"].circleInner.CFrame = Workspace.Part.CFrame
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Button({
+    Title = "Max Jumps",
+    Callback = function()
+        while wait(.0001) do
+            player.multiJumpCount.Value = "50"
+        end
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Button({
+    Title = "Hide Name",
+    Callback = function()
+        local plrname = player.Name
+        Workspace[plrname].Head.nameGui:Destroy()
+    end
+})
+
+MiscTab:Button({
+    Title = "Collect Light Chest",
+    Callback = function()
+        Workspace.lightKarmaChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(5)
+        Workspace.lightKarmaChest["circleInner"].CFrame = Workspace.Part.CFrame
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Button({
+    Title = "ESP",
+    Callback = function()
+        function isnil(thing)
+            return (thing == nil)
+        end
+        local function round(n)
+            return math.floor(tonumber(n) + 0.5)
+        end
+        function UpdatePlayerChams()
+            for i,v in pairs(Players:GetChildren()) do
+                pcall(function()
+                    if not isnil(v.Character) then
+                        for _,k in pairs(v.Character:GetChildren()) do
+                            if k:IsA'BasePart' and not k:FindFirstChild'Cham' then
+                                local cham = Instance.new('BoxHandleAdornment',k)
+                                cham.ZIndex= 10
+                                cham.Adornee=k
+                                cham.AlwaysOnTop=true
+                                cham.Size=k.Size
+                                cham.Transparency=.8
+                                cham.Color3=Color3.new(0,0,1)
+                                cham.Name = 'Cham'
+                            end
+                        end
+                        if not isnil(v.Character.Head) and not v.Character.Head:FindFirstChild'NameEsp' then
+                            local bill = Instance.new('BillboardGui',v.Character.Head)
+                            bill.Name = 'NameEsp'
+                            bill.Size=UDim2.new(1,200,1,30)
+                            bill.Adornee=v.Character.Head
+                            bill.AlwaysOnTop=true
+                            local name = Instance.new('TextLabel',bill)
+                            name.TextWrapped=true
+                            name.Text = (v.Name ..' '.. round((player.Character.Head.Position - v.Character.Head.Position).Magnitude/3) ..'m')
+                            name.Size = UDim2.new(1,0,1,0)
+                            name.TextYAlignment='Top'
+                            name.TextColor3=Color3.new(1,1,1)
+                            name.BackgroundTransparency=1
+                        else
+                            v.Character.Head.NameEsp.TextLabel.Text = (v.Name ..' '.. round((player.Character.Head.Position - v.Character.Head.Position).Magnitude/3) ..'m')
+                        end
+                    end
+                end)
+            end
+        end
+        while wait() do
+            UpdatePlayerChams()
+        end
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Button({
+    Title = "Collect Evil Chest",
+    Callback = function()
+        Workspace.evilKarmaChest["circleInner"].CFrame = player.Character.HumanoidRootPart.CFrame
+        wait(5)
+        Workspace.evilKarmaChest["circleInner"].CFrame = Workspace.Part.CFrame
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Button({
+    Title = "Rejoin Server",
+    Icon = "refresh-cw",
+    Justify = "Center",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Button({
+    Title = "Server Hop",
+    Icon = "shuffle",
+    Justify = "Center",
+    Callback = function()
+        local HttpService = game:GetService("HttpService")
+        local TeleportService = game:GetService("TeleportService")
+        local PlaceId = game.PlaceId
+        
+        local servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+        
+        if servers and servers.data then
+            for _, server in pairs(servers.data) do
+                if server.id ~= game.JobId then
+                    TeleportService:TeleportToPlaceInstance(PlaceId, server.id, LocalPlayer)
+                    break
+                end
+            end
+        end
+    end
+})
+
+MiscTab:Space()
+
+MiscTab:Input({
+    Title = "Keybind",
+    Placeholder = "Enter keybind",
+    Callback = function(text)
+        if text and #text > 0 then
+            if isMobile then
+                WindUI:Notify({
+                    Title = "Mobile Device",
+                    Content = "You cant change keybind on mobile, use the open gui button instead",
+                    Duration = 2,
+                })
+                return
+            end
+            
+            if #text > 1 then
+                WindUI:Notify({
+                    Title = "Invalid Keybind",
+                    Content = "You cant put a keybind that has more than 1 letter",
+                    Duration = 2,
+                })
+                return
+            end
+            
+            local keyName = string.upper(text)
+            
+            if keyName == "K" then
+                WindUI:Notify({
+                    Title = "Invalid Keybind",
+                    Content = "This is already the default keybind",
+                    Duration = 2,
+                })
+                return
+            end
+            
+            if tonumber(keyName) then
+                WindUI:Notify({
+                    Title = "Invalid Keybind",
+                    Content = "You cant put a number as a keybind",
+                    Duration = 2,
+                })
+                return
+            end
+            
+            local restrictedKeys = {"A", "S", "D", "W", "SPACE", "UP", "DOWN", "LEFT", "RIGHT", "ESCAPE", "LEFTSHIFT", "SHIFT", "LSHIFT"}
+            if table.find(restrictedKeys, keyName) then
+                WindUI:Notify({
+                    Title = "Invalid Key",
+                    Content = "You cant use movement keys",
+                    Duration = 2,
+                })
+                return
+            end
+            
+            local keyCode = Enum.KeyCode[keyName]
+            if keyCode then
+                Window:SetToggleKey(keyCode)
+                
+                Window:EditOpenButton({
+                    Title = "Keybind: " .. keyName,
+                    Icon = "grip",
+                    CornerRadius = UDim.new(0,16),
+                    StrokeThickness = 2,
+                    OnlyMobile = false,
+                    Enabled = true,
+                    Draggable = false,
+                })
+                
+                WindUI:Notify({
+                    Title = "Keybind Updated",
+                    Content = "Menu toggle keybind changed to: " .. keyName,
+                    Duration = 2,
+                })
+            else
+                WindUI:Notify({
+                    Title = "Invalid Keybind",
+                    Content = "Keybind '" .. text .. "' is not valid",
+                    Duration = 2,
+                })
+            end
+        end
+    end
+})
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.5)
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.WalkSpeed = speedValue
+        hum.JumpPower = jumpValue
+    end
+end)
+
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+if not isMobile then
+    Window:EditOpenButton({
+        Title = "Keybind: K",
+        Icon = "grip",
+        CornerRadius = UDim.new(0,16),
+        StrokeThickness = 2,
+        OnlyMobile = false,
+        Enabled = true,
+        Draggable = false,
+    })
+    
+    Window:SetToggleKey(Enum.KeyCode.K)
+else
+    Window:EditOpenButton({
+        Title = "Ninja Legends",
+        Icon = "grip",
+        CornerRadius = UDim.new(0,16),
+        StrokeThickness = 2,
+        OnlyMobile = true,
+        Enabled = true,
+        Draggable = true,
+    })
+end
